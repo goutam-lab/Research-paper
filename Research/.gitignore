@@ -1,0 +1,96 @@
+# =====================================
+# Python
+# =====================================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pdb
+*.pkl
+*.egg-info/
+*.egg
+.eggs/
+*.manifest
+*.spec
+
+# Byte-compiled / optimized / DLL files
+*.so
+*.dll
+*.dylib
+
+# =====================================
+# Virtual Environment
+# =====================================
+.env
+.venv
+env/
+venv/
+ENV/
+Pipfile.lock
+poetry.lock
+
+# =====================================
+# IDEs / Editors
+# =====================================
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# =====================================
+# OS generated files
+# =====================================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# =====================================
+# Logs / Outputs
+# =====================================
+*.log
+*.out
+*.err
+
+# =====================================
+# Jupyter Notebook checkpoints
+# =====================================
+.ipynb_checkpoints
+*.ipynb_checkpoints
+
+# =====================================
+# Databases
+# =====================================
+*.sqlite3
+*.db
+*.sqlite
+db.sqlite3
+
+# =====================================
+# Custom Data Folder (your request)
+# =====================================
+Research/data/
+
+# If your repo root is "Research_paper" then use:
+# Research_paper/Research/data/
+
+# =====================================
+# Large dataset files (optional safety)
+# =====================================
+*.csv
+*.tsv
+*.xlsx
+*.xls
+*.h5
+*.parquet
+*.feather
+*.zip
+*.tar
+*.gz
+
+# =====================================
+# Cache
+# =====================================
+.cache/
+.pytest_cache/
+coverage/
+htmlcov/
