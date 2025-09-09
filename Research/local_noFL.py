@@ -59,9 +59,9 @@ negative_npy = np.empty(
     (len(non_covid_images), IMG_SIZE, IMG_SIZE, 1), dtype=np.float32)
 
 # start a bar of show percentage of loading data
-covid_bar = progressbar.ProgressBar(maxval=len(covid_images), widgets=[
+covid_bar = progressbar.ProgressBar(widgets=[
                                     progressbar.Bar('=', '[', ']'), ' ', progressbar.Percentage()])
-non_covid_bar = progressbar.ProgressBar(maxval=len(non_covid_images), widgets=[
+non_covid_bar = progressbar.ProgressBar(widgets=[
                                         progressbar.Bar('=', '[', ']'), ' ', progressbar.Percentage()])
 
 covid_bar.start()

@@ -17,6 +17,7 @@ from sklearn.metrics import log_loss
 
 # Local Imports
 from load_covid import *
+from utils import set_initial_params, get_flat_weights, next_prime, set_model_params
 # Get absolute paths to let a user run the script from anywhere
 current_directory = os.path.dirname(os.path.abspath(__file__))
 parent_directory = os.path.basename(current_directory)
@@ -46,7 +47,7 @@ def get_evaluate_fn(model):
 
     # The 'evaluate' function will be called after every round
     def evaluate(server_round: int, parameters: NDArrays, config: Dict[str, Scalar]) -> Optional[Tuple[float, Dict[str, Scalar]]]:
-        utils.set_model_params(model, parameters)
+        set_model_params(model, parameters)
 
         y_pred = model.model.predict(X_test)
         predicted = np.argmax(y_pred, axis=-1)
@@ -79,8 +80,8 @@ if __name__ == "__main__":
         # RLWE SETTINGS (dynamically)
         WEIGHT_DECIMALS = 8
         model = CNN(WEIGHT_DECIMALS)
-        utils.set_initial_params(model)
-        params, _ = utils.get_flat_weights(model)
+        set_initial_params(model)
+        params, _ = get_flat_weights(model)
 
         # find closest 2^x larger than number of weights
         num_weights = len(params)
@@ -89,12 +90,12 @@ if __name__ == "__main__":
 
         # decide value range t of plaintext
         max_weight_value = 10**WEIGHT_DECIMALS # 100_000_000 if full weights
-        num_clients = 2
-        t = utils.next_prime(num_clients * max_weight_value * 2) # 2_000_000_011
+        num_clients = 8
+        t = next_prime(num_clients * max_weight_value * 2) # 2_000_000_011
         print(f"t: {t}")
 
         # decide value range q of encrypted plaintext
-        q = utils.next_prime(t * 50) # *50 = 100_000_000_567
+        q = next_prime(t * 50) # *50 = 100_000_000_567
         print(f"q: {q}")
 
         std = 3 # standard deviation of Gaussian distribution
@@ -103,8 +104,8 @@ if __name__ == "__main__":
 
         # Custom Strategy
         strategy = CustomFedAvg(
-            min_available_clients=2,
-            min_fit_clients=2,
+            min_available_clients=8,
+            min_fit_clients=8,
             evaluate_fn=get_evaluate_fn(model),
             on_fit_config_fn=fit_round,
             rlwe_instance=rlwe,
@@ -119,7 +120,7 @@ if __name__ == "__main__":
 
         # Start Server
         fl.server.start_server(
-            server_address="0.0.0.0:8080",
+            server_address="127.0.0.1:8080",
             server=server,
             config=fl.server.ServerConfig(num_rounds=5),
         )

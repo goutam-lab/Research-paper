@@ -12,6 +12,7 @@ import flwr as fl
 import tensorflow as tf
 from memory_profiler import memory_usage
 from rlwe_xmkckks import RLWE, Rq
+import numpy as np
 from sklearn.metrics import log_loss
 from sklearn.metrics import precision_score
 from sklearn.metrics import recall_score
@@ -21,6 +22,7 @@ from sklearn.model_selection import train_test_split
 
 # Local Imports
 from load_covid import *
+from utils import set_initial_params, get_flat_weights, next_prime, set_model_params, pad_to_power_of_2, remove_padding, unflatten_weights, get_model_parameters
 # Get absolute paths to let a user run the script from anywhere
 current_directory = os.path.dirname(os.path.abspath(__file__))
 parent_directory = os.path.basename(current_directory)
@@ -35,6 +37,15 @@ else:
     # Add current directory to Python's module search path
     CNN = importlib.import_module(f"{parent_directory}.cnn").CNN
     import utils
+
+
+def discrete_gaussian(n, q, mean=0., std=1.):
+    """
+    Guassian distribution to add errors for the partial decryption
+    Must have larger standard deviation than the errors used for encryption
+    """
+    coeffs = np.round(std * np.random.randn(n))
+    return Rq(coeffs, q)
 
 
 if __name__ == "__main__":
@@ -53,8 +64,8 @@ if __name__ == "__main__":
     # dynamic settings
     WEIGHT_DECIMALS = 8
     model = CNN(WEIGHT_DECIMALS)
-    utils.set_initial_params(model)
-    params, _ = utils.get_flat_weights(model)
+    set_initial_params(model)
+    params, _ = get_flat_weights(model)
     print(params[0:20])
 
     # find closest 2^x larger than number of weights
@@ -64,12 +75,12 @@ if __name__ == "__main__":
 
     # decide value range t of plaintext
     max_weight_value = 10**WEIGHT_DECIMALS # 100_000_000 if full weights
-    num_clients = 10
-    t = utils.next_prime(num_clients * max_weight_value * 2) # 2_000_000_011
+    num_clients = 8
+    t = next_prime(num_clients * max_weight_value * 2) # 2_000_000_011
     print(f"t: {t}")
 
     # decide value range q of encrypted plaintext
-    q = utils.next_prime(t * 50) # 100_000_000_567
+    q = next_prime(t * 50) # 100_000_000_567
     print(f"q: {q}")
 
     # create rlwe instance for this client
@@ -96,35 +107,35 @@ if __name__ == "__main__":
             self.WEIGHT_DECIMALS = WEIGHT_DECIMALS
 
             self.model = CNN(WEIGHT_DECIMALS)
-            utils.set_initial_params(self.model)
+            set_initial_params(self.model)
 
         def get_parameters(self, config):
-            weights = utils.get_model_parameters(self.model)                                                                
+            weights = get_model_parameters(self.model)
             for w in weights:
                 print("::::::::::::::::::::::::")
-                print(w.shape) 
-            return utils.get_model_parameters(self.model)
+                print(w.shape)
+            return get_model_parameters(self.model)
 
         # NB: Use this for default federated learning (changes in server.py also needed)
-        """ def fit(self, parameters, config):  # type: ignore
-            utils.set_model_params(self.model, parameters)
+        def fit(self, parameters, config):  # type: ignore
+            set_model_params(self.model, parameters)
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 self.model.fit(X_train, y_train, X_val, y_val, epochs=15)
-            return utils.get_model_parameters(self.model), len(X_train), {} """
+            return get_model_parameters(self.model), len(X_train), {}
         
         # NB: Use this for lattice encrypted federated learning (changes in server.py also needed)
-        def fit(self, parameters, config):  # type: ignore
+        """ def fit(self, parameters, config):  # type: ignore
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 self.model.fit(X_train, y_train, X_val, y_val, epochs=15)
-            return [], len(X_train), {}
+            return [], len(X_train), {} """
 
         def evaluate(self, parameters, config):  # type: ignore
-            utils.set_model_params(self.model, parameters)
+            set_model_params(self.model, parameters)
             loss, accuracy = self.model.evaluate(X_test, y_test)
             return loss, len(X_test), {"accuracy": accuracy}
-        
+
         ##############################################################################################################
         #  Below steps are involved in the implementation of multi-key homomorphic encryption for federated learning #
         ##############################################################################################################
@@ -141,7 +152,7 @@ if __name__ == "__main__":
             (_, pub) = rlwe.generate_keys()
             print(f"client pub: {pub}")
             return pub[0].poly_to_list()
-        
+
         # Step 2) Server sends aggregated publickey allpub to clients and receive boolean confirmation
         def store_aggregated_pubkey(self, allpub: List[int]) -> bool:
             aggregated_pubkey = self.rlwe.list_to_poly(allpub, "q")
@@ -152,12 +163,12 @@ if __name__ == "__main__":
         # Step 3) After round, encrypt flat list of parameters into two lists (c0, c1)
         def encrypt_parameters(self, request) -> Tuple[List[int], List[int]]:
             print(f"request msg is: {request}")
-            
+
             # Get nested model parameters and turn into long list
-            flattened_weights, self.model_shape = utils.get_flat_weights(self.model)
+            flattened_weights, self.model_shape = get_flat_weights(self.model)
 
             # Pad list until length 2**20 with random numbers that mimic the weights
-            flattened_weights, self.model_length = utils.pad_to_power_of_2(flattened_weights, self.rlwe.n, self.WEIGHT_DECIMALS)
+            flattened_weights, self.model_length = pad_to_power_of_2(flattened_weights, self.rlwe.n, self.WEIGHT_DECIMALS)
             print(f"Client old plaintext: {self.flat_params[925:935]}") if self.flat_params is not None else None
             print(f"Client new plaintext: {flattened_weights[925:935]}")
             # Turn list into polynomial
@@ -183,7 +194,7 @@ if __name__ == "__main__":
         def compute_decryption_share(self, csum1) -> List[int]:
             std = 5
             csum1_poly = self.rlwe.list_to_poly(csum1, "q")
-            error = Rq(np.round(std * np.random.randn(n)), q)
+            error = discrete_gaussian(n, q, 5)
             d1 = self.rlwe.decrypt(csum1_poly, self.rlwe.s, error)
             d1 = list(d1.poly.coeffs) #d1 is poly_t not poly_q
             return d1
@@ -201,14 +212,14 @@ if __name__ == "__main__":
             else:
                 # next rounds (server gives only gradient)
                 self.flat_params = list(np.array(self.flat_params) + np.array(server_flat_weights))
-            
+
             # Remove padding and return weights to original tensor structure and set model weights
-            server_flat_weights = utils.remove_padding(self.model_length)
+            server_flat_weights = remove_padding(self.flat_params, self.model_length)
             # Restore the long list of weights into the neural network's original structure
-            server_weights = utils.unflatten_weights(server_flat_weights, self.model_shape)
+            server_weights = unflatten_weights(server_flat_weights, self.model_shape)
             print(f"Fedavg plaintext: {server_flat_weights[925:935]}")
 
-            utils.set_model_params(self.model, server_weights)
+            set_model_params(self.model, server_weights)
             y_pred = self.model.model.predict(X_test)
 
             predicted = np.argmax(y_pred, axis=-1)
@@ -219,7 +230,7 @@ if __name__ == "__main__":
             recall = recall_score(y_test, predicted)
             f1_score_ = f1_score(y_test, predicted)
             confusion_matrix_ = confusion_matrix(y_test, predicted)
-            
+
             y_pred = self.model.model.predict(X_val)
             predicted = np.argmax(y_pred, axis=-1)
             val_accuarcy = np.equal(y_val, predicted).mean()
@@ -237,9 +248,9 @@ if __name__ == "__main__":
             print()
             return True
 
-    
+
     fl.client.start_numpy_client(
-        server_address="0.0.0.0:8080",
+        server_address="127.0.0.1:8080",
         client=CnnClient(rlwe, WEIGHT_DECIMALS)
     )
 
